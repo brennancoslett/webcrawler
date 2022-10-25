@@ -2,5 +2,6 @@
 setuptools 
 virtualenv
 Kivy
-
+json
+pathlib
 ###### Requirements with Version Specifiers ######
