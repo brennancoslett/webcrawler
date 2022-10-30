@@ -9,6 +9,8 @@ from typing import List
 from pathlib import Path
 # Handling timestamp information for data in Database.
 from datetime import datetime, timezone
+# Ensure only one thread attempts to update the database at a time.
+from threading import Lock
 
 ############### MsgPack Structures for saving the data ###############
 class CrawledURL(Struct, array_like=True):
@@ -47,6 +49,7 @@ class Database():
             self.output_file = self.input_file
         self.encoder = Encoder()
         self.decoder = Decoder(List[CrawledURL])
+        self.mutex = Lock()
         self.data = self.decode_file(self.input_file)
         self.read_only = False # Flag to ignore writing to a file, stops overwriting
 
@@ -100,11 +103,12 @@ class Database():
         """
         Output the encoded data to a file on disk.
         """
-        if not(self.read_only):
-            output = self.encoder.encode(self.data)
-            # self.encode always outputs a single string
-            with open(self.output_file, "wb+") as file:
-                file.write(output)
+        with self.mutex:
+            if not(self.read_only):
+                output = self.encoder.encode(self.data)
+                # self.encode always outputs a single string
+                with open(self.output_file, "wb+") as file:
+                    file.write(output)
 
     def add(self, object: CrawledURL, force_add = False):
         """
@@ -113,16 +117,17 @@ class Database():
         the same page twice, unless we loaded an existing database
         from a file. This can be overwritten with the `force_add` flag.
         """
-        if not(self.read_only):
-            in_database = self.url_in_database(object.url)
-            if in_database == -1 or force_add:
-                if force_add:
-                    print(f"Forcing update of {object.url} in database.")
-                    if in_database != -1:
-                        self.data.pop(in_database)
-                self.data.append(object)
-            else:
-                print(f"URL {object.url} is already in database. Did we crawl this twice?")
+        with self.mutex:
+            if not(self.read_only):
+                in_database = self.url_in_database(object.url)
+                if in_database == -1 or force_add:
+                    if force_add:
+                        print(f"Forcing update of {object.url} in database.")
+                        if in_database != -1:
+                            self.data.pop(in_database)
+                    self.data.append(object)
+                else:
+                    print(f"URL {object.url} is already in database. Did we crawl this twice?")
 
     def url_in_database(self, url: str):
         """
@@ -154,19 +159,20 @@ class Database():
         finds it in the database if it exists, removes it from the array,
         and returns it.
         """
-        idx = None
-        url_of_interest = None
-        if type(object) is CrawledURL:
-            idx = self.data.index(object)
-            url_of_interest = object.url
-        else:
-            url_of_interest = object
-            # Remove it with a string url value instead of the whole object
-            for crawled_url in self.data:
-                if crawled_url.url == object:
-                    idx = self.data.index()
-        if idx is None:
-            print(f"URL {url_of_interest} not in database.")
-            return None
-        else:
-            return self.data.pop(idx)
+        with self.mutex:
+            idx = None
+            url_of_interest = None
+            if type(object) is CrawledURL:
+                idx = self.data.index(object)
+                url_of_interest = object.url
+            else:
+                url_of_interest = object
+                # Remove it with a string url value instead of the whole object
+                for crawled_url in self.data:
+                    if crawled_url.url == object:
+                        idx = self.data.index()
+            if idx is None:
+                print(f"URL {url_of_interest} not in database.")
+                return None
+            else:
+                return self.data.pop(idx)
