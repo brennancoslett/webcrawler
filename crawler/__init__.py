@@ -13,7 +13,7 @@ if __name__ == "__main__":
     # Actual script execution goes in here
     # Database uses input_file for output file when output_file doesn't
     # exist yet.
-    db = Database(input_file="test_database.msgpack")
+    db = Database(input_file="test_database.msgpack") # test_*.msgpack is in .gitignore
     try:
         main(db)
     finally:
