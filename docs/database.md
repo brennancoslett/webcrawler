@@ -55,11 +55,14 @@ information then call `Database.add`:
     crawled = db.build_crawled_url("testurl", rel)
     db.add(crawled)
 
-This function has an optional parameter called `force_add` which will overwrite the given entry with the same .
+This function has an optional parameter called `force_add` which will overwrite the given entry with the same url.
 
 ### Getting a sorted list from the Database based on a keyword
 The `Database.urls_with_keyword` function provides this functionality and will return an array of tuples with the
 urls and their relevance sorted from highest to lowest relevance.
+
+    array = db.urls_with_keyword("tacos")
+    print(array)
 
     # These are generic random strings instead of URLs
     [('Y6YLGSW00FJK', 999999), ('SFUMNW7XAWSG', 999998), ('6RE81H7J2LHU', 999997), ...]
