@@ -11,6 +11,8 @@ from pathlib import Path
 from datetime import datetime, timezone
 # Ensure only one thread attempts to update the database at a time.
 from threading import Lock
+# Used for a reproducible hash function instead of the default python hash() 
+import hashlib
 
 ############### MsgPack Structures for saving the data ###############
 class CrawledURL(Struct, array_like=True):
@@ -19,12 +21,23 @@ class CrawledURL(Struct, array_like=True):
     timestamp: datetime
     relevance: dict
 
+class DatabaseStruct(Struct, array_like=True):
+    crawled_data: List[CrawledURL]
+    url_hash_table: dict
+    keyword_dict: dict
+
 ############### Database object ###############
 class Database():
     """
     Object which handles keeping the state of all the threads for WebCrawling.
     It also handles reading to and from the storage file.
     """
+    def hash(self, string):
+        """
+        https://stackoverflow.com/questions/30585108/disable-hash-randomization-from-within-python-program
+        Default hash function is randomized which messes with the lookup table
+        """
+        return int.from_bytes(hashlib.sha256(string.encode("UTF-8")).digest()[:8], byteorder='big', signed=True)
 
     def __str__(self):
         """
@@ -32,7 +45,13 @@ class Database():
         when printed out using print().
         """
         to_print = "Database"
-        for crawled_url in self.data:
+        len_data = len(self.data)
+        if len_data <= 10:
+            data_array = self.data
+        else:
+            to_print += " (More than 10 entries in database, only showing first 10)"
+            data_array = self.data[:10]
+        for crawled_url in data_array:
             to_print += f"\n  url: {crawled_url.url}\n    timestamp: {crawled_url.timestamp}\n    relevance: {crawled_url.relevance}"
         to_print += "\n"
         return to_print
@@ -48,11 +67,67 @@ class Database():
         else:
             self.output_file = self.input_file
         self.encoder = Encoder()
-        self.decoder = Decoder(List[CrawledURL])
+        self.decoder = Decoder(DatabaseStruct)
         self.mutex = Lock()
-        self.data = self.decode_file(self.input_file)
+        self.data, self.url_hash_table, self.keyword_dict = self.decode_file(self.input_file)
         self.read_only = False # Flag to ignore writing to a file, stops overwriting
+        self.stale_url_days = 5
 
+    def __len__(self):
+        """
+        When looking for the length of the database return the length
+        of the data array.
+        """
+        return len(self.data)
+
+    ######## "Private" functions ########
+    def _msgspec_current_time(self):
+        """
+        Provides a datetime.datetime object to be used by the
+        database to determine when the values in the database are stale.
+        This special version of datetime.now provides the tz.info value
+        that msgspec requires to convert it to data that can be serialized.
+        """
+        return datetime.now(timezone.utc)
+
+    def _url_stale(self, crawled_url: CrawledURL):
+        """
+        Check if the timestamp on the given url is greater than self.stale_url_days
+        """
+        timediff = datetime.now() - crawled_url.timestamp
+        days_old = timediff.days()
+        if days_old > self.stale_url_days:
+            return True
+        else:
+            return False
+
+    ######## Public functions ########
+    def stale_urls(self):
+        """
+        Returns a list of objects which need to be re-crawled
+        as the data in them is stale.
+        """
+        data = []
+        for crawled_url in self.data:
+            if self._url_stale(crawled_url):
+                data.append(crawled_url.url)
+        return data
+
+    def urls_with_keyword(self, keyword: str):
+        """
+        Returns a tuple of urls + their relevance metric for
+        a given keyword
+        """
+        array = []
+        for url_hash in self.keyword_dict[keyword]:
+            data_idx = self.url_hash_table[url_hash]
+            crawled_url = self.data[data_idx]
+            url = crawled_url.url
+            relevance = crawled_url.relevance[keyword]
+            array.append((url, relevance))
+        sorted_array = sorted(array, key=lambda tup: tup[1], reverse=True)
+        return sorted_array
+    
     def cleanup(self):
         """
         Provides a function for all tasks that need to be done to
@@ -68,28 +143,24 @@ class Database():
         with an empty array.
         """
         array = []
+        url_hash_table = {}
+        keyword_dict = {}
+        print("Pulling in database from file.")
         if Path(file).exists():
             try:
                 data = Path(file).read_bytes()
-                array = self.decoder.decode(data)
+                database = self.decoder.decode(data)
+                array = database.crawled_data
+                url_hash_table = database.url_hash_table
+                keyword_dict = database.keyword_dict
             except:
                 pass
             if array == []:
                 print("Decode failed, leaving original database")
                 self.read_only = True
-
         else:
             print(f"File with name {file} not found.")
-        return array
-
-    def msgspec_current_time(self):
-        """
-        Provides a datetime.datetime object to be used by the
-        database to determine when the values in the database are stale.
-        This special version of datetime.now provides the tz.info value
-        that msgspec requires to convert it to data that can be serialized.
-        """
-        return datetime.now(timezone.utc)
+        return (array, url_hash_table, keyword_dict)
 
     def build_crawled_url(self, url: str, relevance: dict):
         """
@@ -97,7 +168,7 @@ class Database():
         This function takes in the url and the relevance dictionary and returns a
         CrawledURL object with a valid timestamp
         """
-        return CrawledURL(url=url, timestamp=self.msgspec_current_time(), relevance=relevance)
+        return CrawledURL(url=url, timestamp=self._msgspec_current_time(), relevance=relevance)
 
     def write_to_disk(self):
         """
@@ -105,7 +176,8 @@ class Database():
         """
         with self.mutex:
             if not(self.read_only):
-                output = self.encoder.encode(self.data)
+                db = DatabaseStruct(self.data, self.url_hash_table, self.keyword_dict)
+                output = self.encoder.encode(db)
                 # self.encode always outputs a single string
                 with open(self.output_file, "wb+") as file:
                     file.write(output)
@@ -119,60 +191,44 @@ class Database():
         """
         with self.mutex:
             if not(self.read_only):
-                in_database = self.url_in_database(object.url)
+                url_hash, in_database = self.url_in_database(object.url)
                 if in_database == -1 or force_add:
                     if force_add:
                         print(f"Forcing update of {object.url} in database.")
                         if in_database != -1:
-                            self.data.pop(in_database)
-                    self.data.append(object)
+                            old_object = self.data[in_database]
+                            self.data[in_database] = object
+                            # Leave the hash table alone as the hash is identical
+                            # Update the values of the keywords for the old object
+                            for keyword in old_object.relevance.keys():
+                                # Returns the value of the keyword, unless it doesn't
+                                # exist then it returns an empty array
+                                value = self.keyword_dict.setdefault(keyword, [])
+                                # Remove the keywords of the old object
+                                val_idx = value.index(url_hash)
+                                value.pop(val_idx)
+                    else:
+                        self.data.append(object)
+                        self.url_hash_table[url_hash] = int(len(self.data) - 1)
+                    for keyword in object.relevance.keys():
+                        # Returns the value of the keyword, unless it doesn't
+                        # exist then it returns an empty array
+                        value = self.keyword_dict.setdefault(keyword, [])
+                        # Since we just pull a reference to the original array
+                        # we can just append here.
+                        value.append(url_hash)
                 else:
                     print(f"URL {object.url} is already in database. Did we crawl this twice?")
 
     def url_in_database(self, url: str):
         """
         Returns index of a CrawledURL if it already exists in the database
-        else -1.
+        else -1  as well as the hash of the inputted url.
         """
-        for crawled in self.data:
-            if crawled.url == url:
-                return self.data.index(crawled)
-        return -1
-
-    def data_stale(self, url: str):
-        """
-        Check if the timestamp on the given url is greater than 5 days
-        """
-        for crawled_url in self.data:
-            if crawled_url.url == url:
-                timediff = datetime.now() - crawled_url.timestamp
-                days_old = timediff.days()
-                if days_old > 5:
-                    return True
-                else:
-                    break
-        return False
-
-    def remove(self, object):
-        """
-        Accepts either a string url or a CrawledURL object,
-        finds it in the database if it exists, removes it from the array,
-        and returns it.
-        """
-        with self.mutex:
-            idx = None
-            url_of_interest = None
-            if type(object) is CrawledURL:
-                idx = self.data.index(object)
-                url_of_interest = object.url
-            else:
-                url_of_interest = object
-                # Remove it with a string url value instead of the whole object
-                for crawled_url in self.data:
-                    if crawled_url.url == object:
-                        idx = self.data.index()
-            if idx is None:
-                print(f"URL {url_of_interest} not in database.")
-                return None
-            else:
-                return self.data.pop(idx)
+        hashed_url = self.hash(url)
+        # Checks if the hashed url is in the table
+        # if it is, then it should return the index of the
+        # value in the array.
+        # if it isn't then it returns -1
+        index_in_array = self.url_hash_table.get(hashed_url, -1)
+        return hashed_url, index_in_array
