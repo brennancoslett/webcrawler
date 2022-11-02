@@ -2,6 +2,6 @@
 setuptools 
 virtualenv
 Kivy
-json
+msgspec
 pathlib
 ###### Requirements with Version Specifiers ######
