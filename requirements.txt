@@ -1,7 +1,14 @@
 ###### Requirements without Version Specifiers ######
+#MISC
 setuptools 
 virtualenv
+##CRAWLER
+beautifulsoup4
+requests
+lxml
+##GUI
 Kivy
+##DATABASE
 msgspec
 pathlib
 ###### Requirements with Version Specifiers ######
