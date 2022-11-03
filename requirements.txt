@@ -9,6 +9,6 @@ lxml
 ##GUI
 Kivy
 ##DATABASE
-json
+msgspec
 pathlib
 ###### Requirements with Version Specifiers ######
