@@ -1,3 +1,4 @@
+from crawler import Crawler
 from database import Database
 import random
 import string
@@ -14,8 +15,8 @@ def append_db(db, len):
         crawled = db.build_crawled_url(randomstring(), rel)
         db.add(crawled)
 
-def main(db):
-    #append_db(db,10)
+def main(crawler, db):
+    crawler.CrawlPage("http://www.ndsu.edu/me",True)
     print(db)
 
 def cleanup(db):
@@ -25,9 +26,10 @@ if __name__ == "__main__":
     # Actual script execution goes in here
     # Database uses input_file for output file when output_file doesn't
     # exist yet.
-    db = Database(input_file="test_database.msgpack") # test_*.msgpack is in .gitignore
+    db = Database(input_file="data/test_database.msgpack") # test_*.msgpack is in .gitignore
+    crawler = Crawler(db)
     try:
-        main(db)
+        main(crawler, db)
     finally:
         # Ensure we always save our state before closing the program.
         cleanup(db)
