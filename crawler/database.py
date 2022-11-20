@@ -207,6 +207,10 @@ class Database():
                                 # Remove the keywords of the old object
                                 val_idx = value.index(url_hash)
                                 value.pop(val_idx)
+                        # If not in the database we need to run the normal process
+                        else:
+                            self.data.append(object)
+                            self.url_hash_table[url_hash] = int(len(self.data) - 1)
                     else:
                         self.data.append(object)
                         self.url_hash_table[url_hash] = int(len(self.data) - 1)
