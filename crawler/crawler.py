@@ -14,21 +14,26 @@ ignoredWords = ['an','and','the']
 
 
 class Crawler:
+    base_url = ""
+
     def __init__(self,  data: Database):
         self.db = data
 
     def addLinksToList(self, links):
+        domainPages = []
         for link in links:
-            print(link)
-            hash, line_found = self.db.url_in_database(link)
-            print(line_found)
-            if  line_found == -1:
-                uncrawl = self.db.build_crawled_url(link,{})
-                self.db.add(uncrawl,True)
+            # hash, line_found = self.db.url_in_database(link)
+            # if  line_found == -1:
+            #     uncrawl = self.db.build_crawled_url(link,{})
+            #     self.db.add(uncrawl,True)
+            #Check if link is in same domain
+            if self.base_url in link:
+                domainPages.append(link)
+        return domainPages
 
     #Searchs URL for any links located on that page
     def getPageLinks(self, link):
-        base_url = link.split('/')[2]
+        self.base_url = link.split('/')[2]
         subpages = []
 
         req =  requests.get(link, headers = headers)
@@ -45,7 +50,7 @@ class Crawler:
                 if 'href' in str(page):
                     _page = page['href']
                     if _page.startswith('/'):
-                        _page = base_url + _page
+                        _page = self.base_url + _page
 
                     if _page.startswith('www'):
                         _page = 'http://' + _page
@@ -67,25 +72,25 @@ class Crawler:
         #Only parse the data if we get a valid server response
         if req.status_code == 200:  
             soup = BeautifulSoup(req.content, 'lxml')
+            keywords=[]
+            if soup.title != None:
+                title = soup.title.string
+                keywords = title.split(" ")
+                print(title)
 
-            title = soup.title.string
-            keywords = title.split(" ")
-            print(title)
             h1 = soup.find_all('h1',recursive=True)
             for heading in h1:
                 temp = heading.get_text().strip().split(" ")
                 for word in temp:
                     if word not in keywords:
                         keywords.append(word)
-                print(temp)
-
+            
             h2 = soup.find_all('h2',recursive=True)
             for heading in h2:
                 temp = heading.get_text().strip().split(" ")
                 for word in temp:
                     if word not in keywords:
                         keywords.append(word)
-                print(temp)
 
             h3 = soup.find_all('h3',recursive=True)
             for heading in h3:
@@ -93,7 +98,6 @@ class Crawler:
                 for word in temp:
                     if word not in keywords:
                         keywords.append(word)
-                print(temp)
 
             h4 = soup.find_all('h4',recursive=True)
             for heading in h4:
@@ -101,10 +105,7 @@ class Crawler:
                 for word in temp:
                     if word not in keywords:
                         keywords.append(word)
-                print(temp)
             
-            print(keywords)
-
             rel = {}
             text = soup.get_text().strip()
             for word in keywords:
@@ -124,9 +125,10 @@ class Crawler:
         subpages = self.getPageLinks(url)
 
         #Write pages to file
-        #TODO make it a DB to pull pages from.
-        self.addLinksToList(subpages)
+        domainPages = self.addLinksToList(subpages)
 
         if index:
             #TODO Search for index keywords for page
             self.indexPage(url)
+
+        return domainPages

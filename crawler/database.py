@@ -94,8 +94,9 @@ class Database():
         """
         Check if the timestamp on the given url is greater than self.stale_url_days
         """
-        timediff = datetime.now() - crawled_url.timestamp
-        days_old = timediff.days()
+        now = datetime.now(timezone.utc)
+        timediff = now - crawled_url.timestamp
+        days_old = timediff.days
         if days_old > self.stale_url_days:
             return True
         else:
