@@ -120,14 +120,22 @@ class Database():
         a given keyword
         """
         array = []
-        for url_hash in self.keyword_dict[keyword]:
+        keyword_lower = keyword.lower()
+        lower_keyword_dict = {k.lower():v for k,v in self.keyword_dict.items()}
+        url_hashes = lower_keyword_dict.get(keyword_lower, [])
+        for url_hash in url_hashes:
             data_idx = self.url_hash_table[url_hash]
             crawled_url = self.data[data_idx]
             url = crawled_url.url
-            relevance = crawled_url.relevance[keyword]
+            lowercase_rel = {k.lower():v for k,v in crawled_url.relevance.items()}
+            relevance = lowercase_rel[keyword_lower]
             array.append((url, relevance))
-        sorted_array = sorted(array, key=lambda tup: tup[1], reverse=True)
-        return sorted_array
+        if len(array) == 0:
+            print("No Matches Found")
+            return []
+        else:
+            sorted_array = sorted(array, key=lambda tup: tup[1], reverse=True)
+            return sorted_array
     
     def cleanup(self):
         """
@@ -192,10 +200,9 @@ class Database():
         """
         with self.mutex:
             if not(self.read_only):
-                url_hash, in_database = self.url_in_database(object.url)
+                url_hash, in_database = self.url_in_database(object.url, return_hash=True)
                 if in_database == -1 or force_add:
                     if force_add:
-                        print(f"Forcing update of {object.url} in database.")
                         if in_database != -1:
                             old_object = self.data[in_database]
                             self.data[in_database] = object
@@ -225,7 +232,7 @@ class Database():
                 else:
                     print(f"URL {object.url} is already in database. Did we crawl this twice?")
 
-    def url_in_database(self, url: str):
+    def url_in_database(self, url: str, return_hash = False):
         """
         Returns index of a CrawledURL if it already exists in the database
         else -1  as well as the hash of the inputted url.
@@ -236,4 +243,7 @@ class Database():
         # value in the array.
         # if it isn't then it returns -1
         index_in_array = self.url_hash_table.get(hashed_url, -1)
-        return hashed_url, index_in_array
+        if return_hash:
+            return hashed_url, index_in_array
+        else:
+            return index_in_array
