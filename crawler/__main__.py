@@ -46,6 +46,12 @@ def UpdateStale(crawler: Crawler, db: Database):
     for thread in threads:
         thread.join()
 
+def ListInfo(db: Database):
+    print(f"Database filename: '{db.input_file}'")
+    print(f"Number of entries: {len(db)}")
+    print(f"Number of keywords: {len(db.keyword_dict)}")
+    print(f"Database load time: {db.load_time * 1000:.04f} ms")
+
 def cleanup(db):
     db.cleanup()
 
@@ -56,10 +62,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--crawl", help="Domain to crawl and add to database")
     parser.add_argument("-k", "--keyword", help="Keyword to search for in the database")
+    parser.add_argument("-l", "--list", action="store_true", help="Display information about the Database")
     parser.add_argument("-s", "--stale", action="store_true", help="Keyword to update stale urls in the database")
     args = parser.parse_args()
 
-    if args.crawl is None and args.keyword is None and args.stale is False:
+    if args.crawl is None and args.keyword is None and args.stale is False and args.list is False:
         print("args required, try `crawler -h`")
         exit(1)
 
@@ -67,6 +74,8 @@ if __name__ == "__main__":
     crawler = Crawler(db)
 
     try:
+        if args.list:
+            ListInfo(db)
         if args.crawl:
             CrawlDomain(crawler, db, args.crawl)
         if args.stale:

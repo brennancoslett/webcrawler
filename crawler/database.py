@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from threading import Lock
 # Used for a reproducible hash function instead of the default python hash() 
 import hashlib
+import time
 
 ############### MsgPack Structures for saving the data ###############
 class CrawledURL(Struct, array_like=True):
@@ -69,7 +70,9 @@ class Database():
         self.encoder = Encoder()
         self.decoder = Decoder(DatabaseStruct)
         self.mutex = Lock()
+        self.start_time = time.time()
         self.data, self.url_hash_table, self.keyword_dict = self.decode_file(self.input_file)
+        self.load_time = time.time() - self.start_time
         self.read_only = False # Flag to ignore writing to a file, stops overwriting
         self.stale_url_days = 5
 
