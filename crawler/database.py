@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from threading import Lock
 # Used for a reproducible hash function instead of the default python hash() 
 import hashlib
+import time
 
 ############### MsgPack Structures for saving the data ###############
 class CrawledURL(Struct, array_like=True):
@@ -69,7 +70,9 @@ class Database():
         self.encoder = Encoder()
         self.decoder = Decoder(DatabaseStruct)
         self.mutex = Lock()
+        self.start_time = time.time()
         self.data, self.url_hash_table, self.keyword_dict = self.decode_file(self.input_file)
+        self.load_time = time.time() - self.start_time
         self.read_only = False # Flag to ignore writing to a file, stops overwriting
         self.stale_url_days = 5
 
@@ -94,8 +97,9 @@ class Database():
         """
         Check if the timestamp on the given url is greater than self.stale_url_days
         """
-        timediff = datetime.now() - crawled_url.timestamp
-        days_old = timediff.days()
+        now = datetime.now(timezone.utc)
+        timediff = now - crawled_url.timestamp
+        days_old = timediff.days
         if days_old > self.stale_url_days:
             return True
         else:
@@ -119,14 +123,22 @@ class Database():
         a given keyword
         """
         array = []
-        for url_hash in self.keyword_dict[keyword]:
+        keyword_lower = keyword.lower()
+        lower_keyword_dict = {k.lower():v for k,v in self.keyword_dict.items()}
+        url_hashes = lower_keyword_dict.get(keyword_lower, [])
+        for url_hash in url_hashes:
             data_idx = self.url_hash_table[url_hash]
             crawled_url = self.data[data_idx]
             url = crawled_url.url
-            relevance = crawled_url.relevance[keyword]
+            lowercase_rel = {k.lower():v for k,v in crawled_url.relevance.items()}
+            relevance = lowercase_rel[keyword_lower]
             array.append((url, relevance))
-        sorted_array = sorted(array, key=lambda tup: tup[1], reverse=True)
-        return sorted_array
+        if len(array) == 0:
+            print("No Matches Found")
+            return []
+        else:
+            sorted_array = sorted(array, key=lambda tup: tup[1], reverse=True)
+            return sorted_array
     
     def cleanup(self):
         """
@@ -191,10 +203,9 @@ class Database():
         """
         with self.mutex:
             if not(self.read_only):
-                url_hash, in_database = self.url_in_database(object.url)
+                url_hash, in_database = self.url_in_database(object.url, return_hash=True)
                 if in_database == -1 or force_add:
                     if force_add:
-                        print(f"Forcing update of {object.url} in database.")
                         if in_database != -1:
                             old_object = self.data[in_database]
                             self.data[in_database] = object
@@ -207,6 +218,10 @@ class Database():
                                 # Remove the keywords of the old object
                                 val_idx = value.index(url_hash)
                                 value.pop(val_idx)
+                        # If not in the database we need to run the normal process
+                        else:
+                            self.data.append(object)
+                            self.url_hash_table[url_hash] = int(len(self.data) - 1)
                     else:
                         self.data.append(object)
                         self.url_hash_table[url_hash] = int(len(self.data) - 1)
@@ -220,7 +235,7 @@ class Database():
                 else:
                     print(f"URL {object.url} is already in database. Did we crawl this twice?")
 
-    def url_in_database(self, url: str):
+    def url_in_database(self, url: str, return_hash = False):
         """
         Returns index of a CrawledURL if it already exists in the database
         else -1  as well as the hash of the inputted url.
@@ -231,4 +246,7 @@ class Database():
         # value in the array.
         # if it isn't then it returns -1
         index_in_array = self.url_hash_table.get(hashed_url, -1)
-        return hashed_url, index_in_array
+        if return_hash:
+            return hashed_url, index_in_array
+        else:
+            return index_in_array
