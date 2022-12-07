@@ -1,5 +1,9 @@
 import PySimpleGUI as sg
 
+import sys
+import os
+sys.path.append(os.getcwd())
+
 from crawler.database import Database
 db = Database(input_file="data/database.msgpack")
 data = db.urls_with_keyword("keyword")
