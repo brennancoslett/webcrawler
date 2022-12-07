@@ -1,8 +1,28 @@
 from crawler import Crawler
 from database import Database
 
-import threading
+from queue import Queue
+from threading  import Thread
 import argparse
+
+
+# Set up some global variables
+num_fetch_threads = 4
+enclosure_queue = Queue()
+crawled_pages = []
+
+def CrawlerThread(crawler: Crawler, db: Database, q: Queue):
+    while True:
+        url = q.get()
+        if url not in crawled_pages:
+            pages = crawler.CrawlPage(url,True,False)
+            crawled_pages.append(url)
+            for page in pages:
+                if page not in crawled_pages:
+                    q.put(page)
+        q.task_done()
+        #print(f'Progress: {len(crawled_pages)} of {len(q.queue)}')
+
 
 def CrawlDomain(crawler: Crawler, db: Database, domain:str):
     """
@@ -10,41 +30,42 @@ def CrawlDomain(crawler: Crawler, db: Database, domain:str):
     database.
     Runs all secondary steps in 
     """
-    threads = []
+    # Add feeder URL
+    enclosure_queue.put(domain)
 
-    # Crawl the top level domain
-    pages = crawler.CrawlPage(domain, True)
-    # Kick off a thread for each page.
-    for page in pages:
-        tmp_thread = threading.Thread(target=crawler.CrawlPage,args=[page, True])
-        tmp_thread.start()
-        threads.append(tmp_thread)
+    for i in range(num_fetch_threads):
+        worker = Thread(target=CrawlerThread, args=(crawler,db,enclosure_queue))
+        worker.setDaemon(True)
+        worker.start()
 
-    # Wait for all threads to finish
-    for thread in threads:
-        thread.join()
-
+    print('*** Main thread waiting')
+    enclosure_queue.join()
+    print('*** Done')
+ 
 def UpdateStale(crawler: Crawler, db: Database):
     """
     Function which takes a domain to crawl and adds its information to a
     database.
     Runs all secondary steps in 
     """
-    threads = []
 
     # Crawl the top level domain
     stalePages = db.stale_urls()
     if len(stalePages) == 0:
         print("No Stale Pages to update")
-    # Kick off a thread for each page.
-    for page in stalePages:
-        tmp_thread = threading.Thread(target=crawler.CrawlPage,args=[page, True])
-        tmp_thread.start()
-        threads.append(tmp_thread)
-
-    # Wait for all threads to finish
-    for thread in threads:
-        thread.join()
+    else:
+        # Add stale URLs
+        for page in stalePages:
+            enclosure_queue.put(page) 
+        #Create multiple threads
+        for i in range(num_fetch_threads):
+            worker = Thread(target=CrawlerThread, args=(crawler,db,enclosure_queue))
+            worker.setDaemon(True)
+            worker.start()
+        
+        print('*** Parsing Stale Pages ***')
+        enclosure_queue.join()
+        print('*** Done ***')
 
 def ListInfo(db: Database):
     print(f"Database filename: '{db.input_file}'")
