@@ -1,7 +1,8 @@
-import kivy
+import PySimpleGUI as sg
 
-from kivy.app import App
-from kivy.uix.widget import Widget
+from crawler.database import Database
+db = Database(input_file="data/database.msgpack")
+data = db.urls_with_keyword("keyword")
 
 class WebcrawerSearch():
     pass

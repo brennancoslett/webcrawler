@@ -1,13 +1,6 @@
 import PySimpleGUI as sg
-#from crawler import Crawler
-import sys
-sys.path.append('..')
-from database import Database
-db = Database(input_file="data/database.msgpack")
 
 sg.theme('BluePurple')
-   
-data = db.urls_with_keyword("keyword")
 
 layout = [[sg.Text('Search Keyword or Phrase:'),
            sg.Text(size=(15,1), key='-OUTPUT-')],
