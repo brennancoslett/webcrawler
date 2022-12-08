@@ -131,8 +131,9 @@ class Database():
             crawled_url = self.data[data_idx]
             url = crawled_url.url
             lowercase_rel = {k.lower():v for k,v in crawled_url.relevance.items()}
-            relevance = lowercase_rel[keyword_lower]
-            array.append((url, relevance))
+            #relevance = lowercase_rel[keyword_lower]
+            #array.append((url, relevance))
+            array.append(url)
         if len(array) == 0:
             print("No Matches Found")
             return []

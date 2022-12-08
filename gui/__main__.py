@@ -4,18 +4,18 @@ import os
 sys.path.append(os.getcwd())
 
 from crawler.database import Database
-db = Database(input_file="data/database.msgpack")
-data = db.urls_with_keyword("keyword")
+db = Database(input_file="data/coe_database.msgpack")
+data = []
 
-sg.theme('BluePurple')
+sg.theme('Reddit')
 
 layout = [[sg.Text('Search Keyword or Phrase:'),
            sg.Text(size=(15,1), key='-OUTPUT-')],
           [sg.Input(key='-IN-')],
           [sg.Button('Search'), sg.Button('Exit')],
-          [sg.Table(data, justification='left', key='-TABLE-')]]
+          [sg.Listbox(data, key='-TABLE-',size=(50,10))]]
   
-window = sg.Window('Introduction', layout)
+window = sg.Window('Search Engine', layout,resizable=True)
 
 keyword = sg.Input(key='-IN-') 
 
@@ -26,9 +26,10 @@ while True:
     if event == 'Search':
         # Update the "output" text element
         # to be the value of "input" element
-        window['-OUTPUT-'].update(values['-IN-'])
+        data = db.urls_with_keyword(values['-IN-'])
+        window.Element("-TABLE-").Update(values=data)
 
-    if event == sg.WINDOW_CLOSED:
+    if event == sg.WINDOW_CLOSED or event == "Exit":
         break
 
     print(event, values)
