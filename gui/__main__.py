@@ -4,7 +4,7 @@ import os
 sys.path.append(os.getcwd())
 
 from crawler.database import Database
-db = Database(input_file="data/coe_database.msgpack")
+db = Database(input_file="data/database.msgpack")
 data = []
 
 sg.theme('Reddit')
