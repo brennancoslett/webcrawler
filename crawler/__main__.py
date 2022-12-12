@@ -4,10 +4,11 @@ from database import Database
 from queue import Queue
 from threading  import Thread
 import argparse
+from os import cpu_count
 
 
 # Set up some global variables
-num_fetch_threads = 4
+num_fetch_threads = cpu_count() - 2 
 enclosure_queue = Queue()
 crawled_pages = []
 
@@ -34,8 +35,7 @@ def CrawlDomain(crawler: Crawler, db: Database, domain:str):
     enclosure_queue.put(domain)
 
     for i in range(num_fetch_threads):
-        worker = Thread(target=CrawlerThread, args=(crawler,db,enclosure_queue))
-        worker.setDaemon(True)
+        worker = Thread(target=CrawlerThread, args=(crawler,db,enclosure_queue),daemon=True)
         worker.start()
 
     print('*** Main thread waiting')
