@@ -3,7 +3,12 @@ import sys
 import os
 sys.path.append(os.getcwd())
 
-from crawler.database import Database
+from main import CrawlDomain
+
+from crawler import Crawler
+crawl = Crawler()
+
+from database import Database
 db = Database(input_file="data/database.msgpack")
 data = []
 
@@ -12,7 +17,7 @@ sg.theme('Reddit')
 layout = [[sg.Text('Search Keyword or Phrase:'),
            sg.Text(size=(15,1), key='-OUTPUT-')],
           [sg.Input(key='-IN-')],
-          [sg.Button('Search'), sg.Button('Exit')],
+          [sg.Button('Crawl'), sg.Button('Search'), sg.Button('Exit')],
           [sg.Listbox(data, key='-TABLE-',size=(50,10))]]
   
 window = sg.Window('Search Engine', layout,resizable=True)
@@ -28,6 +33,9 @@ while True:
         # to be the value of "input" element
         data = db.urls_with_keyword(values['-IN-'])
         window.Element("-TABLE-").Update(values=data)
+
+    if event == 'Crawl':
+        CrawlDomain(crawl, db, values['-IN-'])
 
     if event == sg.WINDOW_CLOSED or event == "Exit":
         break
