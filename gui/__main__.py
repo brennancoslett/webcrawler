@@ -113,8 +113,8 @@ while True:
         crawlerControl.start()
         
     if event == sg.WINDOW_CLOSED or event == "Exit":
-        raise KeyboardInterrupt  
+        break
 
     print(event, values)
-  
+
 window.close()
