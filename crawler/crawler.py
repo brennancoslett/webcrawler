@@ -2,8 +2,11 @@
 
 from bs4 import BeautifulSoup
 import requests
-from database import Database
+from crawler.database import Database
 from queue import Queue
+from threading  import Thread
+import argparse
+from os import cpu_count
 
 headers = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36 QIHU 360SE'
@@ -17,10 +20,16 @@ class Crawler():
     Object which handles crawling through webpages to pull out keywords.
     """
 
+    # Set up some global variables
+    num_fetch_threads = cpu_count() - 2 
+    enclosure_queue = Queue()
+    crawled_pages = []
     base_url = ""
 
     def __init__(self,  data: Database):
         self.db = data
+
+
 
     def addLinksToList(self, links):
         domainPages = []
@@ -157,3 +166,58 @@ class Crawler():
             return domainPages
         else:
             return []
+
+    
+    def CrawlerThread(self,q: Queue):
+        while True:
+            url = q.get()
+            if url not in self.crawled_pages:
+                pages = self.CrawlPage(url,True,False)
+                self.crawled_pages.append(url)
+                for page in pages:
+                    if page not in self.crawled_pages:
+                        q.put(page)
+            q.task_done()
+            #print(f'Progress: {len(crawled_pages)} of {len(q.queue)}')
+
+    def CrawlDomain(self,domain:str):
+        """
+        Function which takes a domain to crawl and adds its information to a
+        database.
+        Runs all secondary steps in 
+        """
+        # Add feeder URL
+        self.enclosure_queue.put(domain)
+
+        for i in range(self.num_fetch_threads):
+            worker = Thread(target=Crawler.CrawlerThread, args=(self.enclosure_queue),daemon=True)
+            worker.start()
+
+        print('*** Main thread waiting')
+        self.enclosure_queue.join()
+        print('*** Done')
+    
+    def UpdateStale(self):
+        """
+        Function which takes a domain to crawl and adds its information to a
+        database.
+        Runs all secondary steps in 
+        """
+
+        # Crawl the top level domain
+        stalePages = self.db.stale_urls()
+        if len(stalePages) == 0:
+            print("No Stale Pages to update")
+        else:
+            # Add stale URLs
+            for page in stalePages:
+                self.enclosure_queue.put(page) 
+            #Create multiple threads
+            for i in range(self.num_fetch_threads):
+                worker = Thread(target=self.CrawlerThread, args=(self.enclosure_queue))
+                worker.setDaemon(True)
+                worker.start()
+            
+            print('*** Parsing Stale Pages ***')
+            self.enclosure_queue.join()
+            print('*** Done ***')

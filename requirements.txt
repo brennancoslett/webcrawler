@@ -5,9 +5,9 @@ virtualenv
 ##CRAWLER
 beautifulsoup4
 requests
-lxml
+lxml==4.9.0
 ##GUI
-Kivy
+PySimpleGUI
 ##DATABASE
 msgspec
 pathlib
