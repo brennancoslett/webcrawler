@@ -13,12 +13,15 @@ from crawler.database import Database
 
 db = Database(input_file="data/database.msgpack")
 crawl = Crawler(db)
-data = []
 
 # Set up some global variables
-num_fetch_threads = cpu_count() - 2 
 enclosure_queue = Queue()
 crawled_pages = []
+data = []
+num_fetch_threads = cpu_count() - 2 
+if num_fetch_threads < 1: 
+    num_fetch_threads = 1
+    
 
 def CrawlerThread(crawler: Crawler, db: Database, q: Queue):
     while True:
@@ -30,6 +33,8 @@ def CrawlerThread(crawler: Crawler, db: Database, q: Queue):
                 if page not in crawled_pages:
                     q.put(page)
         q.task_done()
+        if len(crawled_pages)%20 ==0:
+            db.write_to_disk()
         #print(f'Progress: {len(crawled_pages)} of {len(q.queue)}')
 
 def CrawlDomain(crawler: Crawler, db: Database, domain:str):
@@ -95,26 +100,28 @@ layout = [[sg.Text('Search Keyword or Phrase:'),
 window = sg.Window('Search Engine', layout,resizable=True)
 
 keyword = sg.Input(key='-IN-') 
-
-while True:
-    event, values = window.read()
-    crawlerControl = Thread()
-    print(event, values)
-      
-    if event == 'Search':
-        # Update the "output" text element
-        # to be the value of "input" element
-        data = db.urls_with_keyword(values['-IN-'])
-        window.Element("-TABLE-").Update(values=data)
-
-    if event == 'Crawl':
-        crawlerControl = Thread(target=CrawlDomain,args=(crawl, db, values['-IN-']))
-        window.Element("Crawl").update(disabled=True)
-        crawlerControl.start()
+try:
+    while True:
+        event, values = window.read()
+        crawlerControl = Thread()
+        print(event, values)
         
-    if event == sg.WINDOW_CLOSED or event == "Exit":
-        break
+        if event == 'Search':
+            # Update the "output" text element
+            # to be the value of "input" element
+            data = db.urls_with_keyword(values['-IN-'])
+            window.Element("-TABLE-").Update(values=data)
 
-    print(event, values)
+        if event == 'Crawl':
+            crawlerControl = Thread(target=CrawlDomain,args=(crawl, db, values['-IN-']))
+            window.Element("Crawl").update(disabled=True)
+            crawlerControl.start()
+            
+        if event == sg.WINDOW_CLOSED or event == "Exit":
+            break
+
+        print(event, values)
+finally:
+    db.cleanup()
 
 window.close()
